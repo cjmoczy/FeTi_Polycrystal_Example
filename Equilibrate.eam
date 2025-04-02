@@ -1,0 +1,73 @@
+# Equilibration of Fe polycrystal with 2% Ti.
+
+# Initial States FeTi Size: 20 nm, Seed: 1234
+# Cole Moczygemba
+
+# ---------- Initialize Simulation ---------------------
+clear
+units          metal
+dimension      3
+boundary       p p p
+atom_style     atomic
+atom_modify    map array
+
+
+# ----------------- Initialize Simulation -------------------
+pair_style     meam
+region	       whole block 0 200 0 200 0 200
+create_box     2 whole
+read_dump      dump 0 x y z box yes add yes
+set            group all type/fraction 2 0.02 1234
+
+pair_coeff     * * library.meam Fe Ti FeTi.meam Fe Ti
+neighbor       2.0 bin
+neigh_modify   every 1 delay 5 check yes
+
+
+# ----------------- Directory -------------------------------
+shell          mkdir dump_files
+shell          cd dump_files
+
+
+# --------------------------- SETTINGS -------------------------------
+compute        RDF1 all rdf 100 1 1
+compute        RDF2 all rdf 100 1 2
+compute        RDF3 all rdf 100 2 2
+
+
+######################################
+# EQUILIBRATION AT 300 K
+reset_timestep 0
+timestep       0.001
+velocity       all create 300 4928459 mom yes rot no
+
+fix            EQ300 all npt temp 300.0 300.0 0.2 iso 0 0 1
+fix	           2 all atom/swap 1000 10000 1234 300.0 types 1 2
+
+# Set thermo output
+thermo         1000
+thermo_style   custom step temp pe ke etotal lx ly lz vol pxx pyy pzz press
+fix            Output1 all ave/time 5000 1 5000 c_RDF1[*] file EQ300-FeFe.txt mode vector
+fix            Output2 all ave/time 5000 1 5000 c_RDF2[*] file EQ300-FeTi.txt mode vector
+fix            Output3 all ave/time 5000 1 5000 c_RDF3[*] file EQ300-TiTi.txt mode vector	       
+
+# Run for at least 0.1 ns (assuming 1 fs timestep)
+restart        10000 restart.Fe-Ti-1.*.EQ300
+dump           1 all custom 10000 dump.Fe-Ti-1.EQ300.* id type x y z
+run            1000000
+write_restart  restart.Fe-Ti.EQ300
+unfix          EQ300
+unfix	       2
+unfix          Output1
+unfix          Output2
+unfix          Output3
+undump         1
+
+variable       tmp equal "lz"
+variable       L0 equal ${tmp}
+print          "Initial Length, L0: ${L0}"
+
+
+#---- SIMULATION DONE ------
+print          "All done"
+
